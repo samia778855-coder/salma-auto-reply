@@ -15,7 +15,7 @@ BASE_URL = "https://salma-auto-reply.onrender.com"
 LOG_FILE = "request_logs.csv"
 DAILY_LIMIT = 5
 
-WELCOME_MESSAGE = """مرحبًا بكم في خدمة الشهادات الإلكترونية
+WELCOME_MESSAGE = """مرحبًا بكم في خدمة الرد الآلي 
 مدرسة سلمى بنت قيس للتعليم الأساسي (5-12) 🌷
 
 للحصول على الشهادة:
@@ -229,7 +229,7 @@ def webhook():
                             log_request(student_name, sender_phone, "sent")
                             send_whatsapp_text(
                                 sender_phone,
-                                "تم إرسال الشهادة الإلكترونية بنجاح 🌷\nمع تمنيات مدرسة سلمى بنت قيس لطالباتنا بمزيد من التفوق والتميز."
+                                "تم إرسال الشهادة الإلكترونية بنجاح 🌷\nمع تمنيات مدرسة سلمى بنت قيس لطالباتها مزيداً من التفوق والتميز."
                                 + FOOTER_MESSAGE
                             )
                         else:
