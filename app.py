@@ -1,6 +1,8 @@
-from flask import Flask, request
+from flask import Flask, request, send_from_directory
 import pandas as pd
 import os
+import requests
+from urllib.parse import quote
 
 app = Flask(__name__)
 
@@ -8,11 +10,13 @@ VERIFY_TOKEN = "salma_school_2026"
 
 DATA_FILE = "data/students.xlsx"
 CERTIFICATES_FOLDER = "certificates"
+BASE_URL = "https://salma-auto-reply.onrender.com"
 
 
 def normalize_phone(phone):
     phone = str(phone).strip()
-    phone = phone.replace(" ", "").replace("+", "")
+    phone = phone.replace(" ", "")
+    phone = phone.replace("+", "")
 
     if phone.startswith("968"):
         return phone
@@ -30,9 +34,67 @@ def load_students():
     return df
 
 
+def send_whatsapp_text(to, body):
+    access_token = os.getenv("ACCESS_TOKEN")
+    phone_number_id = os.getenv("PHONE_NUMBER_ID")
+
+    url = f"https://graph.facebook.com/v23.0/{phone_number_id}/messages"
+
+    headers = {
+        "Authorization": f"Bearer {access_token}",
+        "Content-Type": "application/json"
+    }
+
+    payload = {
+        "messaging_product": "whatsapp",
+        "to": to,
+        "type": "text",
+        "text": {
+            "body": body
+        }
+    }
+
+    response = requests.post(url, headers=headers, json=payload)
+
+    print("حالة إرسال النص:", response.status_code)
+    print(response.text)
+
+
+def send_whatsapp_document(to, pdf_url, filename):
+    access_token = os.getenv("ACCESS_TOKEN")
+    phone_number_id = os.getenv("PHONE_NUMBER_ID")
+
+    url = f"https://graph.facebook.com/v23.0/{phone_number_id}/messages"
+
+    headers = {
+        "Authorization": f"Bearer {access_token}",
+        "Content-Type": "application/json"
+    }
+
+    payload = {
+        "messaging_product": "whatsapp",
+        "to": to,
+        "type": "document",
+        "document": {
+            "link": pdf_url,
+            "filename": filename
+        }
+    }
+
+    response = requests.post(url, headers=headers, json=payload)
+
+    print("حالة إرسال الشهادة:", response.status_code)
+    print(response.text)
+
+
 @app.route("/")
 def home():
     return "سلمى بنت قيس للرد الالي يعمل بنجاح"
+
+
+@app.route("/certificate/<filename>")
+def get_certificate(filename):
+    return send_from_directory(CERTIFICATES_FOLDER, filename)
 
 
 @app.route("/webhook", methods=["GET", "POST"])
@@ -64,21 +126,55 @@ def webhook():
                 print("نص الرسالة:", message_text)
 
                 df = load_students()
-
                 matched = df[df["student_name"] == message_text]
+
+                print("عدد النتائج المطابقة:", len(matched))
 
                 if matched.empty:
                     print("لم يتم العثور على الطالبة في ملف Excel")
+                    send_whatsapp_text(
+                        sender_phone,
+                        "عذرًا، لم يتم العثور على اسم الطالبة. يرجى كتابة الاسم كما هو في الشهادة."
+                    )
+
                 else:
                     student = matched.iloc[0]
                     guardian_phone = student["guardian_phone"]
 
+                    print("رقم ولي الأمر المسجل:", guardian_phone)
+
                     if sender_phone == guardian_phone:
                         print("تم التحقق الأمني بنجاح")
-                        print("يسمح بإرسال الشهادة")
+
+                        pdf_filename = message_text + ".pdf"
+                        certificate_path = os.path.join(
+                            CERTIFICATES_FOLDER,
+                            pdf_filename
+                        )
+
+                        if os.path.exists(certificate_path):
+                            encoded_filename = quote(pdf_filename)
+                            pdf_url = f"{BASE_URL}/certificate/{encoded_filename}"
+
+                            send_whatsapp_document(
+                                sender_phone,
+                                pdf_url,
+                                pdf_filename
+                            )
+
+                        else:
+                            print("ملف الشهادة غير موجود:", pdf_filename)
+                            send_whatsapp_text(
+                                sender_phone,
+                                "تم التحقق من بياناتك، لكن ملف الشهادة غير موجود حاليًا. يرجى مراجعة إدارة المدرسة."
+                            )
+
                     else:
                         print("رفض الطلب: رقم المرسل غير مطابق لرقم ولي الأمر")
-                        print("رقم ولي الأمر المسجل:", guardian_phone)
+                        send_whatsapp_text(
+                            sender_phone,
+                            "عذرًا، لا يمكن إرسال الشهادة لأن رقم واتساب المستخدم غير مسجل كرقم ولي أمر لهذه الطالبة."
+                        )
 
             else:
                 print("وصل Webhook بدون رسالة مستخدم")
